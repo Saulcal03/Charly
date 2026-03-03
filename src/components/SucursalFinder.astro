@@ -1,16 +1,18 @@
-
+---
+---
 
 <section id="ubicaciones" class="py-24 bg-gray-50 relative overflow-hidden">
+  
   <div class="container mx-auto px-4 relative z-10">
     <div class="text-center max-w-2xl mx-auto mb-10">
       <h2 class="text-4xl font-extrabold text-charly-black mb-2 tracking-tight">
         Localiza tu <span class="text-charly-red">Charly Pizza</span>
       </h2>
-      <p class="text-gray-500">Ingresa tu C.P. para buscar sucursales (Modo Demo).</p>
+      <p class="text-gray-500">Ingresa tu C.P. para verificar cobertura.</p>
     </div>
 
     <div class="max-w-lg mx-auto relative group z-20">
-      <div class="absolute -inset-1 bg-gradient-to-r from-charly-red to-orange-600 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-300"></div>
+      <div class="absolute -inset-1 bg-gradient-to-r from-charly-red to-orange-600 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
       
       <div class="relative bg-white rounded-full p-2 shadow-xl flex items-center ring-1 ring-gray-200">
         <input 
@@ -19,10 +21,11 @@
           placeholder="Ej: 56600" 
           class="flex-grow p-4 bg-transparent outline-none text-gray-700 font-semibold placeholder-gray-400 ml-2"
           maxlength="5"
+          oninput="this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1');"
         />
         <button 
           id="btn-buscar"
-          class="bg-charly-black text-white px-8 py-4 rounded-full font-bold shadow-lg hover:bg-charly-red transition-all duration-300 flex items-center gap-2"
+          class="bg-charly-black text-white px-8 py-4 rounded-full font-bold shadow-lg hover:bg-charly-red hover:shadow-red-500/30 transition-all duration-300 flex items-center gap-2"
         >
           <span id="btn-text">Buscar</span>
           <svg id="btn-loader" class="animate-spin h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -31,65 +34,161 @@
           </svg>
         </button>
       </div>
+      <p id="error-msg" class="text-red-500 text-sm mt-2 ml-4 hidden absolute">Por favor ingresa 5 números.</p>
     </div>
 
     <div id="resultados-container" class="mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 justify-items-center min-h-[300px]">
+      
       <div class="col-span-full text-center opacity-60">
-        <div class="bg-gray-200 w-24 h-24 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl">📍</div>
-        <p class="text-gray-400">Esperando código postal...</p>
+        <div class="bg-gray-200 w-24 h-24 rounded-full mx-auto mb-4 flex items-center justify-center">
+            <span class="text-4xl">📍</span>
+        </div>
+        <p class="text-gray-400">Prueba con el C.P. <strong class="text-gray-600">56600</strong> o <strong class="text-gray-600">11000</strong></p>
       </div>
+
     </div>
   </div>
 </section>
 
-<script is:inline>
-  document.addEventListener('DOMContentLoaded', () => {
-      const btn = document.getElementById('btn-buscar');
-      const btnText = document.getElementById('btn-text');
-      const btnLoader = document.getElementById('btn-loader');
-      const input = document.getElementById('cp-input');
-      const container = document.getElementById('resultados-container');
+<script>
+  // --- BASE DE DATOS REAL (LOCAL) ---
+  // Aquí es donde configuras qué CPs activan qué sucursales.
+  // Puedes repetir sucursales para diferentes CPs.
+  const sucursalesData = [
+    {
+      cp: ["56600", "56601", "56602"], // Estos CPs activan esta sucursal
+      nombre: "Charly Centro Chalco",
+      direccion: "Av. Cuauhtémoc #12, Centro",
+      horario: "12:00 PM - 10:00 PM",
+      telefono: "55-1234-5678",
+      mapa: "https://maps.google.com" // Aquí pondrías el link real
+    },
+    {
+      cp: ["56600", "56610"], // Nota que el 56600 también activa esta (puede haber 2 opciones)
+      nombre: "Charly Plaza Sendero",
+      direccion: "Local 45, Área de Comida",
+      horario: "11:00 AM - 9:00 PM",
+      telefono: "55-9876-5432",
+      mapa: "https://maps.google.com"
+    },
+    {
+      cp: ["11000", "11590"], 
+      nombre: "Charly Polanco (Express)",
+      direccion: "Av. Masaryk esq. Moliere",
+      horario: "1:00 PM - 11:00 PM",
+      telefono: "55-5555-5555",
+      mapa: "https://maps.google.com"
+    }
+  ];
 
-      function simularBusqueda() {
-        const cpIngresado = input.value.trim();
-        if (cpIngresado.length < 4) return;
+  // --- LÓGICA DEL SISTEMA ---
+  const btn = document.getElementById('btn-buscar');
+  const btnText = document.getElementById('btn-text');
+  const btnLoader = document.getElementById('btn-loader');
+  const input = document.getElementById('cp-input');
+  const container = document.getElementById('resultados-container');
+  const errorMsg = document.getElementById('error-msg');
 
-        // Animación de carga
-        btn.disabled = true;
-        btnText.textContent = "Buscando...";
-        btnLoader.classList.remove('hidden');
-        container.innerHTML = `
-          <div class="col-span-full flex gap-6 justify-center w-full animate-pulse">
-             <div class="h-48 w-full md:w-80 bg-gray-200 rounded-3xl"></div>
-             <div class="h-48 w-80 bg-gray-200 rounded-3xl hidden md:block"></div>
-          </div>
-        `;
+  function buscarSucursales() {
+    const cpIngresado = input.value.trim();
 
-        // Simulamos el tiempo de respuesta de un servidor
-        setTimeout(() => {
-            btn.disabled = false;
-            btnText.textContent = "Buscar";
-            btnLoader.classList.add('hidden');
+    // 1. VALIDACIÓN
+    if (cpIngresado.length !== 5) {
+        errorMsg.classList.remove('hidden');
+        input.classList.add('ring-red-500', 'ring-2');
+        return;
+    }
+    // Si pasa validación, limpiamos errores
+    errorMsg.classList.add('hidden');
+    input.classList.remove('ring-red-500', 'ring-2');
 
-            // Mensaje de demostración para el portafolio
+    // 2. ESTADO DE "CARGANDO"
+    btn.disabled = true;
+    btnText.textContent = "Buscando...";
+    btnLoader.classList.remove('hidden');
+    container.innerHTML = `
+      <div class="col-span-full flex gap-6 justify-center w-full animate-pulse">
+         <div class="h-48 w-full md:w-80 bg-gray-200 rounded-3xl"></div>
+         <div class="h-48 w-80 bg-gray-200 rounded-3xl hidden md:block"></div>
+      </div>
+    `;
+
+    // 3. PROCESO DE BÚSQUEDA (Simulamos 800ms de red)
+    setTimeout(() => {
+        // Filtrar la base de datos: Buscamos si el CP ingresado está en el array 'cp' de cada sucursal
+        const resultados = sucursalesData.filter(sucursal => sucursal.cp.includes(cpIngresado));
+
+        container.innerHTML = ''; // Limpiar skeleton
+        btn.disabled = false;
+        btnText.textContent = "Buscar";
+        btnLoader.classList.add('hidden');
+
+        if (resultados.length > 0) {
+            // -- CASO: ÉXITO (Encontramos sucursales) --
+            resultados.forEach((sucursal, i) => {
+                const card = document.createElement('div');
+                card.className = `
+                    bg-white p-6 rounded-3xl shadow-lg border border-gray-100 w-full max-w-sm
+                    transform scale-95 opacity-0 transition-all duration-500
+                `;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="bg-red-50 w-12 h-12 rounded-2xl flex items-center justify-center text-2xl text-charly-red">🍕</div>
+                        <span class="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">ABIERTO</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-charly-black mb-1">${sucursal.nombre}</h3>
+                    <p class="text-gray-500 text-sm mb-4">${sucursal.direccion}</p>
+                    
+                    <div class="space-y-2 mb-6">
+                        <div class="flex items-center gap-2 text-sm text-gray-600">
+                            <span>🕒</span> ${sucursal.horario}
+                        </div>
+                        <div class="flex items-center gap-2 text-sm text-gray-600">
+                            <span>📞</span> ${sucursal.telefono}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <a href="${sucursal.mapa}" target="_blank" class="text-center bg-gray-100 hover:bg-gray-200 text-charly-black py-2 rounded-xl font-semibold text-sm transition">
+                            📍 Ver Mapa
+                        </a>
+                        <button class="bg-charly-red hover:bg-red-700 text-white py-2 rounded-xl font-semibold text-sm transition shadow-lg shadow-red-200">
+                            Pedir Ahora
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+                
+                // Animación escalonada
+                setTimeout(() => {
+                    card.classList.remove('scale-95', 'opacity-0');
+                    card.classList.add('scale-100', 'opacity-100');
+                }, i * 150);
+            });
+
+        } else {
+            // -- CASO: NO ENCONTRADO --
             container.innerHTML = `
-                <div class="col-span-full text-center py-10 fade-in-up">
-                    <div class="bg-orange-50 w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl">🍕</div>
-                    <h3 class="text-2xl font-bold text-gray-800 mb-2">¡Versión de Demostración!</h3>
+                <div class="col-span-full text-center py-10 animate-fade-in-up">
+                    <div class="bg-orange-50 w-20 h-20 rounded-full mx-auto mb-4 flex items-center justify-center text-4xl">
+                        🛵
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-800 mb-2">¡Lo sentimos!</h3>
                     <p class="text-gray-500 max-w-md mx-auto">
-                        Esta es una maqueta estática para GitHub.
+                        Aún no tenemos cobertura en el C.P. <span class="font-bold text-charly-black">${cpIngresado}</span>, 
+                        pero estamos expandiéndonos rápido.
                     </p>
+                    <button onclick="document.getElementById('cp-input').value = ''; document.getElementById('cp-input').focus();" class="mt-6 text-charly-red font-bold hover:underline">
+                        Intentar con otro código
+                    </button>
                 </div>
             `;
-        }, 1500);
-      }
+        }
 
-      btn.addEventListener('click', simularBusqueda);
-      input.addEventListener('keypress', (e) => { if(e.key === 'Enter') simularBusqueda() });
-  });
+    }, 800); // Fin del timeout
+  }
+
+  // Event Listeners
+  btn.addEventListener('click', buscarSucursales);
+  input.addEventListener('keypress', (e) => { if(e.key === 'Enter') buscarSucursales() });
 </script>
-
-<style>
-  @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-  .fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
-</style>
